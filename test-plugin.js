@@ -1,28 +1,27 @@
 /**
- * Test script for Nuvio Provider Plugins
+ * Test script for Nuvio & Euthopiar Provider Plugins
  */
-const { getStreams } = require('./providers/modflix.js');
+const castle = require('./providers/castle.js');
+const modflix = require('./providers/modflix.js');
 
-async function runTest() {
-  console.log('🧪 Testing Nuvio Provider Plugin: modflix.js');
-  console.log('Querying streams for "Interstellar" (TMDB 157336)...');
-
+async function testAll() {
+  console.log('🧪 Testing Standalone Castle Provider Plugin:');
   try {
-    const streams = await getStreams(157336, 'movie');
-    console.log(`\n✅ Success! Received ${streams.length} streams for Nuvio:\n`);
-    streams.forEach((s, idx) => {
-      console.log(`[${idx + 1}] ${s.name} (${s.quality})`);
-      console.log(`    URL: ${s.url.substring(0, 75)}...`);
-    });
+    const castleStreams = await castle.getStreams('157336', 'movie');
+    console.log(`✅ Castle standalone returned ${castleStreams.length} streams:`);
+    castleStreams.forEach((s, i) => console.log(`   [${i + 1}] ${s.name} (${s.quality})`));
+  } catch (e) {
+    console.error('❌ Castle test error:', e);
+  }
 
-    if (streams.length === 0) {
-      console.error('❌ Warning: No streams returned. Is ModFlix server running on http://localhost:3000?');
-      process.exit(1);
-    }
-  } catch (err) {
-    console.error('❌ Plugin test failed with error:', err);
-    process.exit(1);
+  console.log('\n🧪 Testing ModFlix Bridge Provider Plugin:');
+  try {
+    const bridgeStreams = await modflix.getStreams('157336', 'movie');
+    console.log(`✅ ModFlix bridge returned ${bridgeStreams.length} streams:`);
+    bridgeStreams.slice(0, 3).forEach((s, i) => console.log(`   [${i + 1}] ${s.name} (${s.quality})`));
+  } catch (e) {
+    console.error('❌ ModFlix bridge error:', e);
   }
 }
 
-runTest();
+testAll();

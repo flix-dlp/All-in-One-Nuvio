@@ -1,4 +1,8 @@
-var CryptoJS = (function () {\n  var module = { exports: {} };\n  var exports = module.exports;\n  var define = undefined;\n;(function (root, factory) {
+var CryptoJS = (function () {
+  var module = { exports: {} };
+  var exports = module.exports;
+  var define = undefined;
+;(function (root, factory) {
 	if (typeof exports === "object") {
 		// CommonJS
 		module.exports = exports = factory();
@@ -6654,7 +6658,9 @@ var CryptoJS = (function () {\n  var module = { exports: {} };\n  var exports = 
 
 	return CryptoJS;
 
-}));\n  return module.exports;\n})();\n\n
+}));
+  return module.exports;
+})();
 /**
  * Castle Streams Provider for Nuvio
  * High-speed 1080p, 720p, 480p streams with Multi-Audio & Subtitles from Castle
