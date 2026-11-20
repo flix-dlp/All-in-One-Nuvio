@@ -2,7 +2,7 @@
 
 Official Community Scraper & Provider Repository for **[Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile)** (Android / iOS / TV).
 
-Provides high-speed **Castle VIP** (AES-128 Decrypted), **NetMirror** (OTT titles), **4KHDHub** (HubCloud 4K Direct), **HDHub4u** (Multi-Audio 4K/1080p/720p), and **MovieBox Pro** (Direct MP4 4K/1080p/720p) streams with full **Multi-Audio (Hindi, English, Tamil, Telugu)** in 4K UHD, 1080p, 720p, and 480p.
+Provides high-speed **Castle VIP** (AES-128 Decrypted) and **MovieBox Pro** (Direct MP4 4K/1080p/720p) streams with full **Multi-Audio (Hindi, English, Tamil, Telugu)** in 4K UHD, 1080p, 720p, and 480p.
 
 ---
 
@@ -24,9 +24,6 @@ Provides high-speed **Castle VIP** (AES-128 Decrypted), **NetMirror** (OTT title
 | Provider | ID | Description | Audio / Quality |
 | :--- | :--- | :--- | :--- |
 | **Castle VIP Streams** | `castle` | Direct Castle VIP streams with local AES-128 decryption | Hindi, English, Tamil, Telugu (1080p, 720p) |
-| **NetMirror Streams** | `netmirror` | Netflix, Amazon Prime & Disney+ Hotstar titles | Multi-Audio & Subtitles (1080p, 720p) |
-| **⚡ 4KHDHub Ultra Streams** | `4khdhub` | Direct 4K UHD, 1080p & Remux streams via HubCloud direct CDN | Multi-Audio (4K, 1080p) |
-| **🔥 HDHub4u Multi-Quality** | `hdhub4u` | High-Speed 4K, 1080p, 720p Bollywood, Hollywood & Series | Multi-Audio (4K, 1080p, 720p, 480p) |
 | **📦 MovieBox Pro Streams** | `moviebox` | High-Speed 4K, 1080p, 720p & 480p Direct MP4 streams & downloads | Hindi & English (4K, 1080p, 720p, 480p) |
 
 ---
@@ -35,5 +32,5 @@ Provides high-speed **Castle VIP** (AES-128 Decrypted), **NetMirror** (OTT title
 
 Run the test script with Node.js:
 ```bash
-NODE_PATH=../node_modules node test-plugin.js
+node test-plugin.js
 ```
