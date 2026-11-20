@@ -6963,12 +6963,18 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
               langTag = "[Dual/Multi]";
             }
 
+            var qNorm = quality;
+            var badge = (qNorm === "4K") ? "4K UHD" : (qNorm === "1080p") ? "1080p FHD" : (qNorm === "720p") ? "720p HD" : (qNorm === "480p") ? "480p SD" : qNorm;
+            var sizeStr = formatBytes(resItem.size || 0);
+            var sizeLabel = sizeStr && sizeStr !== "Unknown" ? " (" + sizeStr + ")" : "";
+            var streamName = "MovieBox " + langTag + " - " + badge + sizeLabel + " [" + streamType + "]";
+
             streams.push({
-              name: "MovieBox " + langTag + " - " + quality + " (" + streamType + ")",
-              title: streamTitle + " [" + quality + "]",
+              name: streamName,
+              title: streamTitle + " [" + badge + "]",
               url: url,
-              quality: quality,
-              size: formatBytes(resItem.size || 0),
+              quality: qNorm,
+              size: sizeStr,
               headers: headers,
               provider: "moviebox",
               subtitles: subtitles,
@@ -7011,12 +7017,17 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
               dLangTag = "[Dual/Multi]";
             }
 
+            var dBadge = (dQuality === "4K") ? "4K UHD" : (dQuality === "1080p") ? "1080p FHD" : (dQuality === "720p") ? "720p HD" : (dQuality === "480p") ? "480p SD" : dQuality;
+            var dSizeStr = formatBytes(det.totalSize || 0);
+            var dSizeLabel = dSizeStr && dSizeStr !== "Unknown" ? " (" + dSizeStr + ")" : "";
+            var dStreamName = "MovieBox " + dLangTag + " - " + dBadge + dSizeLabel + " [" + dStreamType + "]";
+
             streams.push({
-              name: "MovieBox " + dLangTag + " - " + dQuality + " (" + dStreamType + ")",
-              title: dStreamTitle + " [" + dQuality + "]",
+              name: dStreamName,
+              title: dStreamTitle + " [" + dBadge + "]",
               url: directUrl,
               quality: dQuality,
-              size: formatBytes(det.totalSize || 0),
+              size: dSizeStr,
               headers: dHeaders,
               provider: "moviebox",
               subtitles: subtitles,

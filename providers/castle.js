@@ -6919,26 +6919,41 @@ var CryptoJS = (function () {
       block.videos.forEach(function (v) {
         var q = v.resolutionDescription || v.resolution || defaultQuality;
         q = q.replace(/^(SD|HD|FHD)\s+/i, '');
-        var streamName = label ? 'Castle ' + label + ' - ' + q : 'Castle - ' + q;
+        var qLower = q.toString().toLowerCase().replace(/p$/, '').trim();
+        var qNorm = qLower + 'p';
+        if (qLower === '2160' || qLower === '4k') qNorm = '4K';
+        else if (qLower === '1080') qNorm = '1080p';
+        else if (qLower === '720') qNorm = '720p';
+        else if (qLower === '480') qNorm = '480p';
+        else if (qLower === '360') qNorm = '360p';
+
+        var badge = (qNorm === '4K') ? '4K UHD' : (qNorm === '1080p') ? '1080p FHD' : (qNorm === '720p') ? '720p HD' : (qNorm === '480p') ? '480p SD' : qNorm;
+        var sizeStr = formatSize(v.size);
+        var sizeLabel = sizeStr ? ' (' + sizeStr + ')' : '';
+        var streamName = label ? 'Castle ' + label + ' - ' + badge + sizeLabel : 'Castle - ' + badge + sizeLabel;
         streams.push({
           name: streamName,
           title: titleStr,
           url: v.url || mainUrl,
-          quality: q,
-          size: formatSize(v.size),
+          quality: qNorm,
+          size: sizeStr,
           headers: PLAYBACK_HEADERS,
           provider: 'castle',
           subtitles: subs
         });
       });
     } else {
-      var sName = label ? 'Castle ' + label + ' - ' + defaultQuality : 'Castle - ' + defaultQuality;
+      var sNorm = '720p';
+      var sBadge = '720p HD';
+      var sSizeStr = formatSize(block.size);
+      var sSizeLabel = sSizeStr ? ' (' + sSizeStr + ')' : '';
+      var sName = label ? 'Castle ' + label + ' - ' + sBadge + sSizeLabel : 'Castle - ' + sBadge + sSizeLabel;
       streams.push({
         name: sName,
         title: titleStr,
         url: mainUrl,
-        quality: defaultQuality,
-        size: formatSize(block.size),
+        quality: sNorm,
+        size: sSizeStr,
         headers: PLAYBACK_HEADERS,
         provider: 'castle',
         subtitles: subs
