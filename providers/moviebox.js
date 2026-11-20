@@ -6690,6 +6690,18 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
     return false;
   }
 
+  function isValidStreamUrl(url) {
+    if (!url || isTrapUrl(url)) return false;
+    var lower = String(url).toLowerCase();
+    // Reject HTML/webpages and aggregator links
+    if (lower.indexOf(".html") !== -1 || lower.indexOf(".htm") !== -1 || lower.indexOf(".php") !== -1) return false;
+    if (lower.indexOf("fzmovies.cms") !== -1 || lower.indexOf("ailok.pe") !== -1 || lower.indexOf("mkvcinemas.cat") !== -1) return false;
+    // Must be a valid streaming URL (media extension or known media CDN)
+    var isMedia = lower.indexOf(".mp4") !== -1 || lower.indexOf(".m3u8") !== -1 || lower.indexOf(".mpd") !== -1 || lower.indexOf(".mkv") !== -1;
+    var isCdn = lower.indexOf("bcdn.hakunaymatata.com") !== -1 || lower.indexOf("macdn.aoneroom.com") !== -1 || lower.indexOf("shalltry.com") !== -1;
+    return isMedia || isCdn;
+  }
+
   function formatBytes(bytes) {
     if (!bytes || bytes <= 0) return "Unknown";
     var units = ["B", "KB", "MB", "GB", "TB"];
@@ -6898,23 +6910,45 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
           for (var r = 0; r < resolutions.length; r++) {
             var resItem = resolutions[r];
             var url = resItem.resourceLink || resItem.downloadUrl;
-            if (!url || isTrapUrl(url) || seenUrls[url]) continue;
+            if (!isValidStreamUrl(url) || seenUrls[url]) continue;
+
+            // If TV series, match requested season and episode
+            if (isTv && (season || episode)) {
+              var epTarget = parseInt(episode || 1);
+              var sTarget = parseInt(season || 1);
+              var epCode = sTarget * 100 + epTarget;
+              if (resItem.episode) {
+                var rEp = parseInt(resItem.episode);
+                var rSe = parseInt(resItem.se || 0);
+                var matchEp = (rEp === epTarget) || (rEp === epCode) || (rSe === sTarget && parseInt(resItem.ep) === epTarget);
+                if (!matchEp) continue;
+              }
+            }
+
             seenUrls[url] = true;
 
             var quality = resItem.resolution ? (resItem.resolution + "p") : "1080p";
             if (resItem.resolution >= 2160) quality = "4K";
 
             var isDash = url.indexOf(".mpd") !== -1;
-            var streamType = isDash ? "DASH" : "Direct MP4";
+            var isHls = url.indexOf(".m3u8") !== -1;
+            var streamType = isDash ? "DASH" : (isHls ? "HLS" : "Direct MP4");
             var streamTitle = candidate.title || info.title;
             if (isTv && season && episode) {
               streamTitle += " S" + padZero(season) + "E" + padZero(episode);
             }
 
+            // Headers: okhttp for direct MP4 (no Referer to prevent 429 CDN throttle)
             var headers = {
-              "User-Agent": "ExoPlayerLib/2.19.1",
-              "Referer": "https://sportslive.wine"
+              "User-Agent": "okhttp/4.9.0",
+              "Accept": "*/*",
+              "Accept-Encoding": "identity",
+              "Connection": "keep-alive"
             };
+            if (isDash || isHls) {
+              headers["Referer"] = "https://sportslive.wine";
+              headers["User-Agent"] = "ExoPlayerLib/2.19.1";
+            }
             if (cookie) headers["Cookie"] = cookie;
 
             streams.push({
@@ -6931,21 +6965,30 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
           }
         } else {
           var directUrl = det.downloadUrl || det.resourceLink;
-          if (directUrl && !isTrapUrl(directUrl) && !seenUrls[directUrl]) {
+          if (isValidStreamUrl(directUrl) && !seenUrls[directUrl]) {
             seenUrls[directUrl] = true;
             var dQuality = "720p";
             if (det.totalSize > 1500000000) dQuality = "1080p";
             else if (det.totalSize < 500000000) dQuality = "480p";
 
+            var isDDash = directUrl.indexOf(".mpd") !== -1;
+            var isDHls = directUrl.indexOf(".m3u8") !== -1;
+            var dStreamType = isDDash ? "DASH" : (isDHls ? "HLS" : "Direct MP4");
             var dStreamTitle = candidate.title || info.title;
             var dHeaders = {
-              "User-Agent": "ExoPlayerLib/2.19.1",
-              "Referer": "https://sportslive.wine"
+              "User-Agent": "okhttp/4.9.0",
+              "Accept": "*/*",
+              "Accept-Encoding": "identity",
+              "Connection": "keep-alive"
             };
+            if (isDDash || isDHls) {
+              dHeaders["Referer"] = "https://sportslive.wine";
+              dHeaders["User-Agent"] = "ExoPlayerLib/2.19.1";
+            }
             if (cookie) dHeaders["Cookie"] = cookie;
 
             streams.push({
-              name: "MovieBox - " + dQuality + " (Direct MP4)",
+              name: "MovieBox - " + dQuality + " (" + dStreamType + ")",
               title: dStreamTitle + " [" + dQuality + "]",
               url: directUrl,
               quality: dQuality,
@@ -7025,10 +7068,24 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
       candidates.sort(function (a, b) {
         var aTitle = cleanTitle(a.title);
         var bTitle = cleanTitle(b.title);
+
+        // Exact title match gets absolute highest priority
+        var aExactFull = (aTitle === wantedClean);
+        var bExactFull = (bTitle === wantedClean);
+        if (aExactFull && !bExactFull) return -1;
+        if (!aExactFull && bExactFull) return 1;
+
+        // Substring match
         var aExact = aTitle.indexOf(wantedClean) !== -1;
         var bExact = bTitle.indexOf(wantedClean) !== -1;
         if (aExact && !bExact) return -1;
         if (!aExact && bExact) return 1;
+
+        // Prefer closer title length (avoids long sentences/clips)
+        var aDiff = Math.abs(aTitle.length - wantedClean.length);
+        var bDiff = Math.abs(bTitle.length - wantedClean.length);
+        if (aDiff !== bDiff) return aDiff - bDiff;
+
         var aHindi = (a.corner === "Hindi" || (a.title && a.title.indexOf("Hindi") !== -1));
         var bHindi = (b.corner === "Hindi" || (b.title && b.title.indexOf("Hindi") !== -1));
         if (aHindi && !bHindi) return -1;
@@ -7038,7 +7095,7 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
 
       var probeIdx = 0;
       function probeNext() {
-        if (probeIdx >= Math.min(candidates.length, 3)) {
+        if (probeIdx >= Math.min(candidates.length, 6)) {
           return Promise.resolve([]);
         }
         var candidate = candidates[probeIdx++];
