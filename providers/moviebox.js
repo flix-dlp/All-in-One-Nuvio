@@ -6951,8 +6951,20 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
             }
             if (cookie) headers["Cookie"] = cookie;
 
+            var langText = (candidate.title + " " + (candidate.corner || "") + " " + (resItem.title || "")).toLowerCase();
+            var langTag = "[English]";
+            if (langText.indexOf("hindi") !== -1) {
+              langTag = "[Hindi]";
+            } else if (langText.indexOf("tamil") !== -1) {
+              langTag = "[Tamil]";
+            } else if (langText.indexOf("telugu") !== -1) {
+              langTag = "[Telugu]";
+            } else if (langText.indexOf("dual") !== -1 || langText.indexOf("multi") !== -1) {
+              langTag = "[Dual/Multi]";
+            }
+
             streams.push({
-              name: "MovieBox - " + quality + " (" + streamType + ")",
+              name: "MovieBox " + langTag + " - " + quality + " (" + streamType + ")",
               title: streamTitle + " [" + quality + "]",
               url: url,
               quality: quality,
@@ -6987,8 +6999,20 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
             }
             if (cookie) dHeaders["Cookie"] = cookie;
 
+            var dLangText = (candidate.title + " " + (candidate.corner || "")).toLowerCase();
+            var dLangTag = "[English]";
+            if (dLangText.indexOf("hindi") !== -1) {
+              dLangTag = "[Hindi]";
+            } else if (dLangText.indexOf("tamil") !== -1) {
+              dLangTag = "[Tamil]";
+            } else if (dLangText.indexOf("telugu") !== -1) {
+              dLangTag = "[Telugu]";
+            } else if (dLangText.indexOf("dual") !== -1 || dLangText.indexOf("multi") !== -1) {
+              dLangTag = "[Dual/Multi]";
+            }
+
             streams.push({
-              name: "MovieBox - " + dQuality + " (" + dStreamType + ")",
+              name: "MovieBox " + dLangTag + " - " + dQuality + " (" + dStreamType + ")",
               title: dStreamTitle + " [" + dQuality + "]",
               url: directUrl,
               quality: dQuality,
