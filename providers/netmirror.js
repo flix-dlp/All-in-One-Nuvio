@@ -15,7 +15,8 @@
     'User-Agent': APP_USER_AGENT,
     'Referer': BASE + '/mobile/home?app=1',
     'X-Requested-With': 'app.netmirror.netmirrornew',
-    'Accept': '*/*'
+    'Accept': '*/*',
+    'Cookie': 'hd=on; user_type=vip'
   };
 
   function request(url, options) {
@@ -174,6 +175,7 @@
             if (!src || !src.file) continue;
 
             var streamUrl = src.file.startsWith('http') ? src.file : (src.file.startsWith('//') ? 'https:' + src.file : BASE + (src.file.startsWith('/') ? '' : '/') + src.file);
+            streamUrl = streamUrl.replace(/hd=off/g, 'hd=on');
             var label = src.label || 'Auto';
             var quality = '1080p';
             if (label.includes('720') || /mid\s*hd/i.test(label)) quality = '720p';
