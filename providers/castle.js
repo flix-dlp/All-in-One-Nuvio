@@ -6752,14 +6752,41 @@ var CryptoJS = (function () {
   }
 
   function getTMDBDetails(tmdbId, mediaType) {
-    var endpoint = TMDB_BASE_URL + '/' + (mediaType === 'tv' ? 'tv' : 'movie') + '/' + tmdbId + '?api_key=' + TMDB_API_KEY;
+    var isTv = mediaType === 'tv' || mediaType === 'series';
+    var tType = isTv ? 'tv' : 'movie';
+    var endpoint = TMDB_BASE_URL + '/' + tType + '/' + tmdbId + '?api_key=' + TMDB_API_KEY;
     return request(endpoint).then(function (r) {
+      if (!r.ok) throw new Error('TMDB primary returned ' + r.status);
       return r.json();
     }).then(function (data) {
-      var title = mediaType === 'tv' ? data.name : data.title;
-      var dateStr = mediaType === 'tv' ? data.first_air_date : data.release_date;
+      var title = isTv ? data.name : data.title;
+      var dateStr = isTv ? data.first_air_date : data.release_date;
       var year = dateStr ? parseInt(dateStr.split('-')[0]) : null;
       return { title: title, year: year, tmdbId: tmdbId };
+    }).catch(function () {
+      // Fallback 1: api.tmdb.org mirror
+      var mirrorUrl = 'https://api.tmdb.org/3/' + tType + '/' + tmdbId + '?api_key=' + TMDB_API_KEY;
+      return request(mirrorUrl).then(function (r) {
+        if (!r.ok) throw new Error('TMDB mirror error');
+        return r.json();
+      }).then(function (data) {
+        var title = isTv ? data.name : data.title;
+        var dateStr = isTv ? data.first_air_date : data.release_date;
+        var year = dateStr ? parseInt(dateStr.split('-')[0]) : null;
+        return { title: title, year: year, tmdbId: tmdbId };
+      }).catch(function () {
+        // Fallback 2: Cinemeta (if tmdbId is imdb id)
+        if (typeof tmdbId === 'string' && tmdbId.startsWith('tt')) {
+          var cUrl = 'https://v3-cinemeta.strem.io/meta/' + (isTv ? 'series' : 'movie') + '/' + tmdbId + '.json';
+          return request(cUrl).then(function (r) { return r.json(); }).then(function (c) {
+            if (c && c.meta && c.meta.name) {
+              return { title: c.meta.name, year: parseInt(c.meta.year) || null, tmdbId: tmdbId };
+            }
+            throw new Error('Cinemeta title not found');
+          });
+        }
+        throw new Error('Failed to fetch details for TMDB ID: ' + tmdbId);
+      });
     });
   }
 
