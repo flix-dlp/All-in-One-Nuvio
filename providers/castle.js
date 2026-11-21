@@ -6751,9 +6751,7 @@ var CryptoJS = (function () {
     return plain.replace(/:\s*(\d{15,})\b/g, ':"$1"');
   }
 
-  function getTMDBDetails(tmdbId, mediaType) {
-    var isTv = mediaType === 'tv' || mediaType === 'series';
-    var tType = isTv ? 'tv' : 'movie';
+  function resolveCastleTmdb(tmdbId, isTv, tType) {
     var endpoint = TMDB_BASE_URL + '/' + tType + '/' + tmdbId + '?api_key=' + TMDB_API_KEY;
     return request(endpoint).then(function (r) {
       if (!r.ok) throw new Error('TMDB primary returned ' + r.status);
@@ -6764,7 +6762,6 @@ var CryptoJS = (function () {
       var year = dateStr ? parseInt(dateStr.split('-')[0]) : null;
       return { title: title, year: year, tmdbId: tmdbId };
     }).catch(function () {
-      // Fallback 1: api.tmdb.org mirror
       var mirrorUrl = 'https://api.tmdb.org/3/' + tType + '/' + tmdbId + '?api_key=' + TMDB_API_KEY;
       return request(mirrorUrl).then(function (r) {
         if (!r.ok) throw new Error('TMDB mirror error');
@@ -6774,20 +6771,25 @@ var CryptoJS = (function () {
         var dateStr = isTv ? data.first_air_date : data.release_date;
         var year = dateStr ? parseInt(dateStr.split('-')[0]) : null;
         return { title: title, year: year, tmdbId: tmdbId };
-      }).catch(function () {
-        // Fallback 2: Cinemeta (if tmdbId is imdb id)
-        if (typeof tmdbId === 'string' && tmdbId.startsWith('tt')) {
-          var cUrl = 'https://v3-cinemeta.strem.io/meta/' + (isTv ? 'series' : 'movie') + '/' + tmdbId + '.json';
-          return request(cUrl).then(function (r) { return r.json(); }).then(function (c) {
-            if (c && c.meta && c.meta.name) {
-              return { title: c.meta.name, year: parseInt(c.meta.year) || null, tmdbId: tmdbId };
-            }
-            throw new Error('Cinemeta title not found');
-          });
-        }
-        throw new Error('Failed to fetch details for TMDB ID: ' + tmdbId);
       });
     });
+  }
+
+  function getTMDBDetails(tmdbId, mediaType) {
+    var isTv = mediaType === 'tv' || mediaType === 'series';
+    var tType = isTv ? 'tv' : 'movie';
+    if (typeof tmdbId === 'string' && tmdbId.startsWith('tt')) {
+      var cUrl = 'https://v3-cinemeta.strem.io/meta/' + (isTv ? 'series' : 'movie') + '/' + tmdbId + '.json';
+      return request(cUrl).then(function (r) { return r.json(); }).then(function (c) {
+        if (c && c.meta && c.meta.name) {
+          return { title: c.meta.name, year: parseInt(c.meta.year) || null, tmdbId: tmdbId };
+        }
+        throw new Error('Cinemeta title not found');
+      }).catch(function () {
+        return resolveCastleTmdb(tmdbId, isTv, tType);
+      });
+    }
+    return resolveCastleTmdb(tmdbId, isTv, tType);
   }
 
   function getSecurityKey() {

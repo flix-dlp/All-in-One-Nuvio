@@ -6667,8 +6667,17 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
 (function () {
   "use strict";
 
-  var BASE_URL = "https://api5.aoneroom.com";
-  var HOSTNAME = "api5.aoneroom.com";
+  var API_SERVERS = [
+    "https://api5.aoneroom.com",
+    "https://api6.aoneroom.com",
+    "https://apig.inmoviebox.com",
+    "https://api.aoneroom.com",
+    "https://i-api.aoneroom.com",
+    "https://api-sin.aoneroom.com",
+    "https://v-ios.aoneroom.com",
+    "https://h5.aoneroom.com"
+  ];
+  var currentServerIdx = 0;
   var GATEWAY_SECRET = "76iRl07s0xSN9jqmEWAt79EBJZulIQIsV64FZr2O";
   var TMDB_KEY = "439c478a771f35c05022f9feabcca01c";
 
@@ -6717,6 +6726,43 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
     return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, " ").trim();
   }
 
+  function getBaseTitle(str) {
+    var s = String(str || "").toLowerCase();
+    // Remove brackets content like [Hindi], (Dubbed), [S1-S4]
+    s = s.replace(/\[[^\]]*\]/g, " ").replace(/\([^\)]*\)/g, " ");
+    // Remove season markers like S1-S4, S01, Season 1
+    s = s.replace(/\bs\d+(\s*-\s*s?\d+)?\b/gi, " ");
+    s = s.replace(/\bseason\s*\d+(\s*-\s*\d+)?\b/gi, " ");
+    // Remove dubbed / audio tags
+    s = s.replace(/\b(hindi|english|tamil|telugu|kannada|malayalam|bengali|marathi|bhojpuri|punjabi|dual\s*audio|multi\s*audio|dubbed|dub)\b/gi, " ");
+    // Remove 4-digit years
+    s = s.replace(/\b(19\d\d|20\d\d)\b/g, " ");
+    // Normalize special characters to spaces
+    s = s.replace(/[^a-z0-9]/gi, " ").trim();
+    return s.replace(/\s+/g, " ");
+  }
+
+  function isStrictMatch(candTitle, wantedTitle) {
+    var baseCand = getBaseTitle(candTitle);
+    var baseWanted = getBaseTitle(wantedTitle);
+    if (!baseCand || !baseWanted) return false;
+    return baseCand === baseWanted;
+  }
+
+  function getLanguageTag(candTitle, candCorner, resTitle, url) {
+    var lower = (String(candTitle || "") + " " + String(candCorner || "") + " " + String(resTitle || "") + " " + String(url || "")).toLowerCase();
+    if (lower.indexOf("hindi") !== -1 || lower.indexOf("tran-audio") !== -1) return "[Hindi]";
+    if (lower.indexOf("tamil") !== -1) return "[Tamil]";
+    if (lower.indexOf("telugu") !== -1) return "[Telugu]";
+    if (lower.indexOf("malayalam") !== -1) return "[Malayalam]";
+    if (lower.indexOf("kannada") !== -1) return "[Kannada]";
+    if (lower.indexOf("bengali") !== -1) return "[Bengali]";
+    if (lower.indexOf("marathi") !== -1) return "[Marathi]";
+    if (lower.indexOf("punjabi") !== -1) return "[Punjabi]";
+    if (lower.indexOf("dual") !== -1 || lower.indexOf("multi") !== -1) return "[Dual/Multi]";
+    return "[English]";
+  }
+
   function buildQuery(params) {
     var keys = Object.keys(params).sort();
     var pairs = [];
@@ -6752,11 +6798,22 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
   var sessionToken = "";
   var sessionExpires = 0;
 
-  function mbRequest(method, endpoint, params, data) {
-    params = params || {};
-    if (!params.host) params.host = HOSTNAME;
-    var qStr = buildQuery(params);
-    var fullUrl = BASE_URL + endpoint + (qStr ? ("?" + qStr) : "");
+  function mbRequest(method, endpoint, params, data, attempt) {
+    attempt = attempt || 0;
+    if (attempt >= API_SERVERS.length) {
+      return Promise.resolve({});
+    }
+
+    var base = API_SERVERS[currentServerIdx];
+    var host = base.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    var reqParam = {};
+    if (params) {
+      for (var k in params) reqParam[k] = params[k];
+    }
+    if (!reqParam.host) reqParam.host = host;
+
+    var qStr = buildQuery(reqParam);
+    var fullUrl = base + endpoint + (qStr ? ("?" + qStr) : "");
     var bodyStr = data ? JSON.stringify(data) : "";
     var timestamp = Date.now();
     var sig = generateSignature(method, endpoint, qStr, bodyStr, timestamp);
@@ -6813,10 +6870,14 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
     }
 
     return fetch(fullUrl, options).then(function (res) {
+      if (!res.ok && res.status >= 500) {
+        throw new Error("HTTP " + res.status);
+      }
       return res.json();
     }).catch(function (err) {
-      console.error("[MovieBox Provider] Request error: " + err.message);
-      return {};
+      console.warn("[MovieBox Provider] Mirror " + base + " failed (" + err.message + "), rotating...");
+      currentServerIdx = (currentServerIdx + 1) % API_SERVERS.length;
+      return mbRequest(method, endpoint, params, data, attempt + 1);
     });
   }
 
@@ -6929,6 +6990,10 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
 
             var quality = resItem.resolution ? (resItem.resolution + "p") : "1080p";
             if (resItem.resolution >= 2160) quality = "4K";
+            else if (resItem.resolution >= 1080) quality = "1080p";
+            else if (resItem.resolution >= 720) quality = "720p";
+            else if (resItem.resolution >= 480) quality = "480p";
+            else quality = "360p";
 
             var isDash = url.indexOf(".mpd") !== -1;
             var isHls = url.indexOf(".m3u8") !== -1;
@@ -6951,20 +7016,9 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
             }
             if (cookie) headers["Cookie"] = cookie;
 
-            var langText = (candidate.title + " " + (candidate.corner || "") + " " + (resItem.title || "")).toLowerCase();
-            var langTag = "[English]";
-            if (langText.indexOf("hindi") !== -1) {
-              langTag = "[Hindi]";
-            } else if (langText.indexOf("tamil") !== -1) {
-              langTag = "[Tamil]";
-            } else if (langText.indexOf("telugu") !== -1) {
-              langTag = "[Telugu]";
-            } else if (langText.indexOf("dual") !== -1 || langText.indexOf("multi") !== -1) {
-              langTag = "[Dual/Multi]";
-            }
-
+            var langTag = getLanguageTag(candidate.title, candidate.corner, resItem.title, url);
             var qNorm = quality;
-            var badge = (qNorm === "4K") ? "4K UHD" : (qNorm === "1080p") ? "1080p FHD" : (qNorm === "720p") ? "720p HD" : (qNorm === "480p") ? "480p SD" : qNorm;
+            var badge = (qNorm === "4K") ? "4K UHD" : (qNorm === "1080p") ? "1080p FHD" : (qNorm === "720p") ? "720p HD" : (qNorm === "480p") ? "480p SD" : (qNorm === "360p") ? "360p SD" : qNorm;
             var sizeStr = formatBytes(resItem.size || 0);
             var sizeLabel = sizeStr && sizeStr !== "Unknown" ? " (" + sizeStr + ")" : "";
             var streamName = "MovieBox " + langTag + " - " + badge + sizeLabel + " [" + streamType + "]";
@@ -6986,7 +7040,8 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
           if (isValidStreamUrl(directUrl) && !seenUrls[directUrl]) {
             seenUrls[directUrl] = true;
             var dQuality = "720p";
-            if (det.totalSize > 1500000000) dQuality = "1080p";
+            if (det.totalSize > 3000000000) dQuality = "4K";
+            else if (det.totalSize > 1500000000) dQuality = "1080p";
             else if (det.totalSize < 500000000) dQuality = "480p";
 
             var isDDash = directUrl.indexOf(".mpd") !== -1;
@@ -7003,21 +7058,10 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
               dHeaders["Referer"] = "https://sportslive.wine";
               dHeaders["User-Agent"] = "ExoPlayerLib/2.19.1";
             }
-            if (cookie) dHeaders["Cookie"] = cookie;
+            if (cookie) headers["Cookie"] = cookie;
 
-            var dLangText = (candidate.title + " " + (candidate.corner || "")).toLowerCase();
-            var dLangTag = "[English]";
-            if (dLangText.indexOf("hindi") !== -1) {
-              dLangTag = "[Hindi]";
-            } else if (dLangText.indexOf("tamil") !== -1) {
-              dLangTag = "[Tamil]";
-            } else if (dLangText.indexOf("telugu") !== -1) {
-              dLangTag = "[Telugu]";
-            } else if (dLangText.indexOf("dual") !== -1 || dLangText.indexOf("multi") !== -1) {
-              dLangTag = "[Dual/Multi]";
-            }
-
-            var dBadge = (dQuality === "4K") ? "4K UHD" : (dQuality === "1080p") ? "1080p FHD" : (dQuality === "720p") ? "720p HD" : (dQuality === "480p") ? "480p SD" : dQuality;
+            var dLangTag = getLanguageTag(candidate.title, candidate.corner, "", directUrl);
+            var dBadge = (dQuality === "4K") ? "4K UHD" : (dQuality === "1080p") ? "1080p FHD" : (dQuality === "720p") ? "720p HD" : (dQuality === "480p") ? "480p SD" : (dQuality === "360p") ? "360p SD" : dQuality;
             var dSizeStr = formatBytes(det.totalSize || 0);
             var dSizeLabel = dSizeStr && dSizeStr !== "Unknown" ? " (" + dSizeStr + ")" : "";
             var dStreamName = "MovieBox " + dLangTag + " - " + dBadge + dSizeLabel + " [" + dStreamType + "]";
@@ -7099,52 +7143,69 @@ var CryptoJS = (function () { var module = { exports: {} }; var exports = module
     }).then(function (candidates) {
       if (!candidates || candidates.length === 0) return [];
 
-      var wantedClean = cleanTitle(parsedTitleInfo.title);
-      candidates.sort(function (a, b) {
-        var aTitle = cleanTitle(a.title);
-        var bTitle = cleanTitle(b.title);
+      var wantedTitle = parsedTitleInfo.title;
+      // Filter candidates with strict type and strict title matching
+      var validCandidates = [];
+      for (var i = 0; i < candidates.length; i++) {
+        var cand = candidates[i];
+        if (!cand || !cand.subjectId || !cand.title) continue;
 
-        // Exact title match gets absolute highest priority
-        var aExactFull = (aTitle === wantedClean);
-        var bExactFull = (bTitle === wantedClean);
-        if (aExactFull && !bExactFull) return -1;
-        if (!aExactFull && bExactFull) return 1;
+        if (isTv) {
+          if (cand.subjectType === 1 || cand.subjectType === 5 || cand.subjectType === 6 || cand.subjectType === 9) continue;
+          var isSeriesType = (cand.subjectType === 2) || (cand.seNum && cand.seNum > 0) || (/\bs\d+/i.test(cand.title));
+          if (!isSeriesType) continue;
+        } else {
+          if (cand.subjectType === 2 || cand.subjectType === 5 || cand.subjectType === 6 || cand.subjectType === 9) continue;
+        }
 
-        // Substring match
-        var aExact = aTitle.indexOf(wantedClean) !== -1;
-        var bExact = bTitle.indexOf(wantedClean) !== -1;
+        if (!isStrictMatch(cand.title, wantedTitle)) continue;
+
+        validCandidates.push(cand);
+      }
+
+      if (validCandidates.length === 0) return [];
+
+      // Sort: Exact title match first
+      validCandidates.sort(function (a, b) {
+        var aExact = (cleanTitle(a.title) === cleanTitle(wantedTitle));
+        var bExact = (cleanTitle(b.title) === cleanTitle(wantedTitle));
         if (aExact && !bExact) return -1;
         if (!aExact && bExact) return 1;
-
-        // Prefer closer title length (avoids long sentences/clips)
-        var aDiff = Math.abs(aTitle.length - wantedClean.length);
-        var bDiff = Math.abs(bTitle.length - wantedClean.length);
-        if (aDiff !== bDiff) return aDiff - bDiff;
-
-        var aHindi = (a.corner === "Hindi" || (a.title && a.title.indexOf("Hindi") !== -1));
-        var bHindi = (b.corner === "Hindi" || (b.title && b.title.indexOf("Hindi") !== -1));
-        if (aHindi && !bHindi) return -1;
-        if (!aHindi && bHindi) return 1;
         return 0;
       });
 
-      var probeIdx = 0;
-      function probeNext() {
-        if (probeIdx >= Math.min(candidates.length, 6)) {
-          return Promise.resolve([]);
+      // Probe all valid matching candidates (up to 6) to gather ALL languages and ALL qualities
+      var probeLimit = Math.min(validCandidates.length, 6);
+      var allCollectedStreams = [];
+      var seenGlobalUrls = {};
+      var candIdx = 0;
+
+      function probeNextCandidate() {
+        if (candIdx >= probeLimit) {
+          return Promise.resolve(allCollectedStreams);
         }
-        var candidate = candidates[probeIdx++];
-        return extractStreamsFromCandidate(candidate, parsedTitleInfo, isTv, season, episode).then(function (streams) {
-          if (streams && streams.length > 0) return streams;
-          return probeNext();
+        var candidate = validCandidates[candIdx++];
+        return extractStreamsFromCandidate(candidate, parsedTitleInfo, isTv, season, episode).then(function (candStreams) {
+          if (candStreams && candStreams.length > 0) {
+            for (var s = 0; s < candStreams.length; s++) {
+              var st = candStreams[s];
+              if (!seenGlobalUrls[st.url]) {
+                seenGlobalUrls[st.url] = true;
+                allCollectedStreams.push(st);
+              }
+            }
+          }
+          return probeNextCandidate();
         });
       }
 
-      return probeNext();
+      return probeNextCandidate();
     }).then(function (streams) {
       streams.sort(function (a, b) {
-        var qMap = { "4K": 4, "1080p": 3, "720p": 2, "480p": 1, "360p": 0 };
-        return (qMap[b.quality] || 0) - (qMap[a.quality] || 0);
+        var qMap = { "4K": 5, "1080p": 4, "720p": 3, "480p": 2, "360p": 1 };
+        var qDiff = (qMap[b.quality] || 0) - (qMap[a.quality] || 0);
+        if (qDiff !== 0) return qDiff;
+        return a.name.localeCompare(b.name);
       });
       return streams;
     }).catch(function (err) {
