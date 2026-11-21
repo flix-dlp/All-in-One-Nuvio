@@ -1,13 +1,13 @@
 {
   "name": "All-in-One-Nuvio",
-  "version": "1.5.4",
-  "description": "High-speed Bollywood, Hollywood & TV Series streams with Castle VIP & MovieBox Pro - Standalone Zero-Server",
+  "version": "1.5.5",
+  "description": "High-speed Bollywood, Hollywood & TV Series streams with Castle VIP, MovieBox Pro & 4KHDHub Downloads - Standalone Zero-Server",
   "scrapers": [
     {
       "id": "castle",
       "name": "🏰 Castle VIP Streams",
       "description": "Direct Castle VIP Bollywood, Hollywood & TV series in 1080p with Multi-Audio (Hindi, English, Tamil, Telugu, etc.)",
-      "version": "1.5.4",
+      "version": "1.5.5",
       "author": "ModFlix Team",
       "supportedTypes": ["movie", "tv"],
       "filename": "providers/castle.js",
@@ -22,7 +22,7 @@
       "id": "moviebox",
       "name": "📦 MovieBox Pro Streams",
       "description": "High-Speed 4K, 1080p, 720p & 480p Direct MP4 streams & downloads with multi-audio",
-      "version": "1.5.4",
+      "version": "1.5.5",
       "author": "ModFlix Team",
       "supportedTypes": ["movie", "tv"],
       "filename": "providers/moviebox.js",
@@ -31,6 +31,21 @@
       "hasSettings": false,
       "formats": ["mp4", "mpd"],
       "logo": "https://img.icons8.com/color/96/box.png",
+      "contentLanguage": ["hi", "en", "ta", "te"]
+    },
+    {
+      "id": "4khdhub",
+      "name": "📥 4KHDHub Downloads",
+      "description": "High-speed 4K UHD, 1080p & 720p direct downloads & streams via HubCloud, PixelDrain & Cloudflare Fast-DL",
+      "version": "1.5.5",
+      "author": "ModFlix Team",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/4khdhub.js",
+      "main": "providers/4khdhub.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": ["mkv", "mp4"],
+      "logo": "https://img.icons8.com/color/96/download--v1.png",
       "contentLanguage": ["hi", "en", "ta", "te"]
     }
   ],
@@ -39,7 +54,7 @@
       "id": "castle",
       "name": "🏰 Castle VIP Streams",
       "description": "Direct Castle VIP Bollywood, Hollywood & TV series in 1080p with Multi-Audio (Hindi, English, Tamil, Telugu, etc.)",
-      "version": "1.5.4",
+      "version": "1.5.5",
       "author": "ModFlix Team",
       "supportedTypes": ["movie", "tv"],
       "filename": "providers/castle.js",
@@ -54,7 +69,7 @@
       "id": "moviebox",
       "name": "📦 MovieBox Pro Streams",
       "description": "High-Speed 4K, 1080p, 720p & 480p Direct MP4 streams & downloads with multi-audio",
-      "version": "1.5.4",
+      "version": "1.5.5",
       "author": "ModFlix Team",
       "supportedTypes": ["movie", "tv"],
       "filename": "providers/moviebox.js",
@@ -63,6 +78,21 @@
       "hasSettings": false,
       "formats": ["mp4", "mpd"],
       "logo": "https://img.icons8.com/color/96/box.png",
+      "contentLanguage": ["hi", "en", "ta", "te"]
+    },
+    {
+      "id": "4khdhub",
+      "name": "📥 4KHDHub Downloads",
+      "description": "High-speed 4K UHD, 1080p & 720p direct downloads & streams via HubCloud, PixelDrain & Cloudflare Fast-DL",
+      "version": "1.5.5",
+      "author": "ModFlix Team",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/4khdhub.js",
+      "main": "providers/4khdhub.js",
+      "enabled": true,
+      "hasSettings": false,
+      "formats": ["mkv", "mp4"],
+      "logo": "https://img.icons8.com/color/96/download--v1.png",
       "contentLanguage": ["hi", "en", "ta", "te"]
     }
   ]
