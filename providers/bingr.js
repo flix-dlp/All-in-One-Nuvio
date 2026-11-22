@@ -96,6 +96,7 @@ async function resolveMetadata(tmdbId, mediaType, extraArgs) {
     let imdbId = extraArgs.imdbId || '';
     let totalSeasons = extraArgs.totalSeasons || '';
     let origLang = extraArgs.originalLanguage || extraArgs.original_language || '';
+    let isAnime = mediaType === 'anime';
 
     if (!title || !year || !origLang) {
         try {
@@ -111,6 +112,12 @@ async function resolveMetadata(tmdbId, mediaType, extraArgs) {
                 imdbId = imdbId || meta.imdb_id || (meta.external_ids ? meta.external_ids.imdb_id : '') || '';
                 totalSeasons = totalSeasons || meta.number_of_seasons || '';
                 origLang = origLang || meta.original_language || '';
+                if (meta.genres && Array.isArray(meta.genres)) {
+                    if (meta.genres.some(g => g.id === 16 || (g.name && g.name.toLowerCase() === 'animation'))) {
+                        isAnime = true;
+                    }
+                }
+                if (origLang === 'ja') isAnime = true;
             }
         } catch (e) {
             console.log('[Bingr] Metadata lookup fallback note: ' + e.message);
@@ -122,7 +129,8 @@ async function resolveMetadata(tmdbId, mediaType, extraArgs) {
         year: year ? String(year) : '2020',
         imdbId: imdbId || '',
         totalSeasons: totalSeasons ? String(totalSeasons) : '1',
-        originalLanguage: origLang || (mediaType === 'anime' ? 'ja' : 'en')
+        originalLanguage: origLang || (isAnime ? 'ja' : 'en'),
+        isAnime: isAnime
     };
 }
 
@@ -172,6 +180,18 @@ async function queryVidbolt(tmdbId, mediaType, season, episode, meta, timeoutMs)
                                     headers
                                 });
                             }
+                        }
+                    }
+
+                    // Check if Vidbolt returned live action dubs for an anime target
+                    if (meta.isAnime && meta.originalLanguage === 'ja') {
+                        const hasJa = streamObj.sources.some(s => (s.language || '').toLowerCase().indexOf('jap') >= 0);
+                        const hasLiveActionDubs = streamObj.sources.some(s => {
+                            var l = (s.language || '').toLowerCase();
+                            return l === 'hindi' || l === 'tamil' || l === 'telugu' || l === 'arabic';
+                        });
+                        if (!hasJa && hasLiveActionDubs && streamObj.sources.length >= 4) {
+                            return;
                         }
                     }
 
@@ -247,7 +267,7 @@ async function queryPunkflix(tmdbId, mediaType, season, episode, meta, timeoutMs
             url = 'https://punkflix.net/tv/' + tmdbId + '/' + (season || 1) + '/' + (episode || 1) + '.json';
         }
 
-        const res = await fetchWithTimeout(url, { headers }, timeoutMs || 4000);
+        const res = await fetchWithTimeout(url, { headers }, timeoutMs || 7000);
 
         if (res.ok) {
             const data = await res.json();
@@ -363,7 +383,7 @@ async function queryFlikhub(tmdbId, mediaType, season, episode, meta, timeoutMs)
             url = 'https://proxy1.flikhub.net/tv?id=' + tmdbId + '&season=' + (season || 1) + '&episode=' + (episode || 1) + '&mode=json&sources=berlin&hevc=1';
         }
 
-        const res = await fetchWithTimeout(url, { headers }, timeoutMs || 4000);
+        const res = await fetchWithTimeout(url, { headers }, timeoutMs || 7000);
 
         if (res.ok) {
             const data = await res.json();
@@ -433,7 +453,7 @@ async function queryFilmu(tmdbId, mediaType, season, episode, meta, timeoutMs) {
             url = 'https://embed.filmu.in/api/singularity-tv?tmdb=' + encodeURIComponent(tmdbId) + '&s=' + (season || 1) + '&e=' + (episode || 1);
         }
 
-        const res = await fetchWithTimeout(url, { headers }, timeoutMs || 4000);
+        const res = await fetchWithTimeout(url, { headers }, timeoutMs || 7000);
 
         if (res.ok) {
             const data = await res.json();
@@ -515,12 +535,12 @@ async function getStreams(tmdbId, mediaType, season, episode, extraArgs) {
         const meta = await resolveMetadata(tmdbId, mediaType, extraArgs);
         console.log('[Bingr] Resolved metadata: "' + meta.title + '" (' + meta.year + '), Original Language: ' + meta.originalLanguage);
 
-        // Query providers in parallel with 4s individual timeout
+        // Query providers in parallel with safe individual timeouts
         const queryPromises = [
-            queryVidbolt(tmdbId, mediaType, season, episode, meta, 4000),
-            queryPunkflix(tmdbId, mediaType, season, episode, meta, 4000),
-            queryFlikhub(tmdbId, mediaType, season, episode, meta, 4000),
-            queryFilmu(tmdbId, mediaType, season, episode, meta, 4000)
+            queryVidbolt(tmdbId, mediaType, season, episode, meta, 6000),
+            queryPunkflix(tmdbId, mediaType, season, episode, meta, 12000),
+            queryFlikhub(tmdbId, mediaType, season, episode, meta, 6000),
+            queryFilmu(tmdbId, mediaType, season, episode, meta, 6000)
         ];
 
         const queryResults = await Promise.allSettled(queryPromises);
@@ -557,6 +577,25 @@ async function getStreams(tmdbId, mediaType, season, episode, extraArgs) {
                 stream.subtitles = aggregatedSubtitles;
             }
         }
+
+function getStreamRank(s, meta) {
+    var rank = 0;
+    var q = (s.quality || '').toLowerCase();
+    if (q.indexOf('4k') >= 0 || q.indexOf('2160') >= 0) rank += 400;
+    else if (q.indexOf('1080') >= 0) rank += 300;
+    else if (q.indexOf('720') >= 0) rank += 200;
+    else if (q.indexOf('480') >= 0) rank += 100;
+
+    if (meta && meta.isAnime) {
+        if (s.language === 'ja' || (s.name && s.name.indexOf('[JPN]') >= 0)) rank += 500;
+        if (s.language === 'multi' || (s.name && s.name.indexOf('[MULTI]') >= 0)) rank += 350;
+    }
+    return rank;
+}
+
+        allStreams.sort(function (a, b) {
+            return getStreamRank(b, meta) - getStreamRank(a, meta);
+        });
 
         console.log('[Bingr] Total streams discovered: ' + allStreams.length);
         return allStreams;

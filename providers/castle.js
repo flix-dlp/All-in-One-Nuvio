@@ -6760,9 +6760,22 @@ var CryptoJS = (function () {
       var title = isTv ? data.name : data.title;
       var dateStr = isTv ? data.first_air_date : data.release_date;
       var year = dateStr ? parseInt(dateStr.split('-')[0]) : null;
-      return { title: title, year: year, tmdbId: tmdbId };
+      var isAnime = false;
+      if (data.genres && Array.isArray(data.genres)) {
+        isAnime = data.genres.some(function (g) {
+          return g.id === 16 || (g.name && g.name.toLowerCase() === 'animation');
+        });
+      }
+      if (data.original_language === 'ja') isAnime = true;
+      return {
+        title: title,
+        year: year,
+        tmdbId: tmdbId,
+        isAnime: isAnime,
+        originalLanguage: data.original_language || ''
+      };
     }).catch(function () {
-      var mirrorUrl = 'https://api.tmdb.org/3/' + tType + '/' + tmdbId + '?api_key=' + TMDB_API_KEY;
+      var mirrorUrl = 'https://db.wecollege.net/3/' + tType + '/' + tmdbId + '?language=en-US';
       return request(mirrorUrl).then(function (r) {
         if (!r.ok) throw new Error('TMDB mirror error');
         return r.json();
@@ -6770,7 +6783,20 @@ var CryptoJS = (function () {
         var title = isTv ? data.name : data.title;
         var dateStr = isTv ? data.first_air_date : data.release_date;
         var year = dateStr ? parseInt(dateStr.split('-')[0]) : null;
-        return { title: title, year: year, tmdbId: tmdbId };
+        var isAnime = false;
+        if (data.genres && Array.isArray(data.genres)) {
+          isAnime = data.genres.some(function (g) {
+            return g.id === 16 || (g.name && g.name.toLowerCase() === 'animation');
+          });
+        }
+        if (data.original_language === 'ja') isAnime = true;
+        return {
+          title: title,
+          year: year,
+          tmdbId: tmdbId,
+          isAnime: isAnime,
+          originalLanguage: data.original_language || ''
+        };
       });
     });
   }
@@ -6782,7 +6808,14 @@ var CryptoJS = (function () {
       var cUrl = 'https://v3-cinemeta.strem.io/meta/' + (isTv ? 'series' : 'movie') + '/' + tmdbId + '.json';
       return request(cUrl).then(function (r) { return r.json(); }).then(function (c) {
         if (c && c.meta && c.meta.name) {
-          return { title: c.meta.name, year: parseInt(c.meta.year) || null, tmdbId: tmdbId };
+          var isAnime = (c.meta.genres || []).indexOf('Animation') >= 0;
+          return {
+            title: c.meta.name,
+            year: parseInt(c.meta.year) || null,
+            tmdbId: tmdbId,
+            isAnime: isAnime,
+            originalLanguage: ''
+          };
         }
         throw new Error('Cinemeta title not found');
       }).catch(function () {
@@ -6988,22 +7021,59 @@ var CryptoJS = (function () {
       return getSecurityKey();
     }).then(function (key) {
       secKey = key;
-      var q = parsedTmdb.year ? (parsedTmdb.title + ' ' + parsedTmdb.year) : parsedTmdb.title;
+      // Search with clean title to avoid year indexing issues on Castle
+      var q = parsedTmdb.title;
       return searchCastle(secKey, q);
     }).then(function (searchRes) {
       var rows = extractDataBlock(searchRes).rows || [];
       if (rows.length === 0) throw new Error('No match found on Castle');
 
       var targetId = null;
-      var lowerTitle = (parsedTmdb.title || '').toLowerCase();
+      var lowerTitle = (parsedTmdb.title || '').toLowerCase().trim();
+      var scoredRows = [];
+
       for (var i = 0; i < rows.length; i++) {
-        var rName = (rows[i].title || rows[i].name || '').toLowerCase();
-        if (rName.includes(lowerTitle) || lowerTitle.includes(rName)) {
-          targetId = rows[i].id || rows[i].redirectId || rows[i].redirectIdStr;
-          if (targetId) break;
+        var r = rows[i];
+        var rName = (r.title || r.name || '').toLowerCase().trim();
+        var rowId = r.id || r.redirectId || r.redirectIdStr;
+        if (!rowId) continue;
+
+        var score = 0;
+        if (rName === lowerTitle) {
+          score += 50;
+        } else if (rName.indexOf(lowerTitle) >= 0 || lowerTitle.indexOf(rName) >= 0) {
+          score += 30;
+        } else {
+          continue;
         }
+
+        var isRowAnime = (r.movieTypeName === 'Anime' || r.movieType === 5);
+        if (!isRowAnime && r.tags && Array.isArray(r.tags)) {
+          isRowAnime = r.tags.some(function (t) {
+            var tl = String(t).toLowerCase();
+            return tl.indexOf('animation') >= 0 || tl.indexOf('anime') >= 0 || tl.indexOf('cartoon') >= 0;
+          });
+        }
+        var intro = (r.briefIntroduction || '').toLowerCase();
+        var isRowLiveAction = intro.indexOf('live-action') >= 0 || intro.indexOf('live action') >= 0 || rName.indexOf('live action') >= 0;
+
+        if (parsedTmdb.isAnime) {
+          if (isRowAnime) score += 60;
+          if (isRowLiveAction) score -= 120;
+          if (r.languages && r.languages.indexOf('Japanese') >= 0) score += 30;
+          if (r.countries && r.countries.indexOf('Japan') >= 0) score += 20;
+        } else {
+          if (isRowLiveAction) score += 60;
+          if (isRowAnime) score -= 80;
+        }
+
+        scoredRows.push({ id: rowId, score: score, row: r });
       }
-      if (!targetId && rows[0]) {
+
+      scoredRows.sort(function (a, b) { return b.score - a.score; });
+      if (scoredRows.length > 0 && scoredRows[0].score > 0) {
+        targetId = scoredRows[0].id;
+      } else if (rows[0]) {
         targetId = rows[0].id || rows[0].redirectId || rows[0].redirectIdStr;
       }
       if (!targetId) throw new Error('Could not resolve Castle movie ID');

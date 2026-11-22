@@ -237,22 +237,33 @@ async function resolveMetadata(tmdbId, mediaType, extraArgs) {
     extraArgs = extraArgs || {};
     var title = extraArgs.title || extraArgs.name || '';
     var year = extraArgs.year || (extraArgs.releaseDate ? extraArgs.releaseDate.substring(0, 4) : '');
+    var isAnime = extraArgs.isAnime || (mediaType === 'anime');
+    var origLang = extraArgs.originalLanguage || '';
 
-    if (!title) {
+    if (!title || !year || !origLang) {
         try {
             var tmdbType = mediaType === 'movie' ? 'movie' : 'tv';
             var res = await safeFetch(TMDB_PROXY_URL + '/' + tmdbType + '/' + tmdbId + '?language=en-US');
             if (res.ok) {
                 var data = await res.json();
-                title = data.title || data.name || '';
-                year = (data.release_date || data.first_air_date || '').substring(0, 4);
+                title = title || data.title || data.name || '';
+                year = year || (data.release_date || data.first_air_date || '').substring(0, 4);
+                origLang = origLang || data.original_language || '';
+                if (data.genres && Array.isArray(data.genres)) {
+                    if (data.genres.some(function(g) { return g.id === 16 || (g.name && g.name.toLowerCase() === 'animation'); })) {
+                        isAnime = true;
+                    }
+                }
+                if (origLang === 'ja') isAnime = true;
             }
         } catch (e) {}
     }
 
     return {
         title: title || ('Media ' + tmdbId),
-        year: year || ''
+        year: year || '',
+        isAnime: isAnime,
+        originalLanguage: origLang
     };
 }
 
@@ -291,7 +302,7 @@ function phoneticNormalize(t) {
     return String(t || '').replace(/aa+/g, 'a').replace(/ee+/g, 'i').replace(/oo+/g, 'u');
 }
 
-function scoreCandidateTitle(targetTitle, targetYear, candTitle, isMovie, sNum) {
+function scoreCandidateTitle(targetTitle, targetYear, candTitle, isMovie, sNum, isAnime) {
     var targetClean = cleanTitle(targetTitle);
     var candClean = cleanTitle(candTitle);
     var targetNorm = phoneticNormalize(targetClean);
@@ -329,25 +340,32 @@ function scoreCandidateTitle(targetTitle, targetYear, candTitle, isMovie, sNum) 
         score -= 80;
     }
 
-    // Year validation window (+/- 1 year tolerance)
-    if (isMovie && targetYear) {
-        var metaY = parseInt(targetYear, 10);
-        var candYearMatches = candTitle.match(/\b(19\d\d|20\d\d)\b/g);
-        if (candYearMatches && candYearMatches.length > 0) {
-            var hasYearMatch = candYearMatches.some(function(yStr) {
-                var y = parseInt(yStr, 10);
-                return Math.abs(y - metaY) <= 1;
-            });
-            if (hasYearMatch) {
-                score += 50;
-            } else {
-                score -= 80;
-            }
-        }
-        if (/season\s*\d+|complete\s*series|s\d{1,2}e\d{1,2}/i.test(candTitle)) score -= 100;
-    } else if (!isMovie) {
-        if (/\bmovie\b|\bfilm\b/i.test(candTitle)) score -= 80;
+    // Live-action vs Anime check
+    var candLower = candTitle.toLowerCase();
+    var isCandLiveAction = candLower.indexOf('live action') >= 0 || candLower.indexOf('live-action') >= 0;
+    if (isAnime && isCandLiveAction) {
+        score -= 150;
+    } else if (!isAnime && isCandLiveAction) {
+        score += 40;
     }
+
+    // Year validation window (+/- 1 year tolerance)
+    var metaY = parseInt(targetYear, 10);
+    var candYearMatches = candTitle.match(/\b(19\d\d|20\d\d)\b/g);
+    if (metaY && candYearMatches && candYearMatches.length > 0) {
+        var hasYearMatch = candYearMatches.some(function(yStr) {
+            var y = parseInt(yStr, 10);
+            return Math.abs(y - metaY) <= 1;
+        });
+        if (hasYearMatch) {
+            score += 50;
+        } else {
+            score -= 80;
+        }
+    }
+
+    if (isMovie && /season\s*\d+|complete\s*series|s\d{1,2}e\d{1,2}/i.test(candTitle)) score -= 100;
+    if (!isMovie && /\bmovie\b|\bfilm\b/i.test(candTitle)) score -= 80;
 
     return score;
 }
@@ -406,7 +424,7 @@ async function searchAndResolveOtt(ott, meta, isMovie, season, episode, cookie) 
                 var scoredMovies = [];
                 for (var mIdx = 0; mIdx < results.length; mIdx++) {
                     var r = results[mIdx];
-                    var sc = scoreCandidateTitle(meta.title, meta.year, r.t, true, 1);
+                    var sc = scoreCandidateTitle(meta.title, meta.year, r.t, true, 1, meta.isAnime);
                     if (sc >= 40) {
                         scoredMovies.push({ item: r, score: sc });
                     }
@@ -421,20 +439,38 @@ async function searchAndResolveOtt(ott, meta, isMovie, season, episode, cookie) 
                 var scoredShows = [];
                 for (var sIdx = 0; sIdx < results.length; sIdx++) {
                     var candShow = results[sIdx];
-                    var sScore = scoreCandidateTitle(meta.title, meta.year, candShow.t, false, season);
+                    var sScore = scoreCandidateTitle(meta.title, meta.year, candShow.t, false, season, meta.isAnime);
                     if (sScore >= 40) {
                         scoredShows.push({ item: candShow, score: sScore });
                     }
                 }
                 scoredShows.sort(function(a, b) { return b.score - a.score; });
                 if (scoredShows.length > 0) {
-                    var candidates = scoredShows.slice(0, 3);
+                    var candidates = scoredShows.slice(0, 5);
                     for (var c = 0; c < candidates.length; c++) {
                         var cand = candidates[c].item;
                         var postUrl = cachedApiBase + '/newtv/post.php?id=' + cand.id;
                         var postRes = await safeFetch(postUrl, { headers: headers });
                         if (!postRes.ok) continue;
                         var postJson = await postRes.json();
+
+                        // Year mismatch verification
+                        var postYear = parseInt(postJson.year || postJson.y, 10);
+                        var targetYear = parseInt(meta.year, 10);
+                        if (postYear && targetYear && Math.abs(postYear - targetYear) > 2) {
+                            continue;
+                        }
+
+                        // Live-action vs Anime verification
+                        var postDesc = (postJson.desc || postJson.d || '').toLowerCase();
+                        var candT = (cand.t || '').toLowerCase();
+                        var isPostLiveAction = postDesc.indexOf('live-action') >= 0 || postDesc.indexOf('live action') >= 0 || candT.indexOf('live action') >= 0;
+                        if (meta.isAnime && isPostLiveAction) {
+                            continue;
+                        }
+                        if (!meta.isAnime && targetYear >= 2020 && !isPostLiveAction && candT === 'one piece') {
+                            if (postYear && postYear < 2020) continue;
+                        }
 
                         var seasons = postJson.season || [];
                         if (seasons.length === 0) continue;

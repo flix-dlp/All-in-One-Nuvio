@@ -67,6 +67,39 @@ async function testAll() {
     console.error('❌ TV Series test error:', e.message);
   }
 
+  // 5. One Piece Anime vs Live-Action Verification
+  console.log('\n🧪 [Anime vs Live Action Test] Testing One Piece Anime S01E01 (TMDB 37854):');
+  try {
+    const cAnime = await castle.getStreams('37854', 'tv', 1, 1);
+    console.log(`✅ Castle Anime returned ${cAnime ? cAnime.length : 0} streams`);
+    if (cAnime && cAnime.length > 0) {
+      console.log(`   Sample: ${cAnime[0].name} (${cAnime[0].quality}) - ${cAnime[0].size}`);
+    }
+    const bAnime = await bingr.getStreams('37854', 'tv', 1, 1);
+    console.log(`✅ Bingr Anime returned ${bAnime ? bAnime.length : 0} streams`);
+    if (bAnime && bAnime.length > 0) {
+      console.log(`   Sample: ${bAnime[0].name} (${bAnime[0].quality}) - ${bAnime[0].url.substring(0, 80)}`);
+    }
+  } catch (e) {
+    console.error('❌ Anime test error:', e.message);
+  }
+
+  console.log('\n🧪 [Anime vs Live Action Test] Testing One Piece Live Action S01E01 (TMDB 111110):');
+  try {
+    const cLive = await castle.getStreams('111110', 'tv', 1, 1);
+    console.log(`✅ Castle Live Action returned ${cLive ? cLive.length : 0} streams`);
+    if (cLive && cLive.length > 0) {
+      console.log(`   Sample: ${cLive[0].name} (${cLive[0].quality}) - ${cLive[0].size}`);
+    }
+    const nLive = await net77.getStreams('111110', 'tv', 1, 1);
+    console.log(`✅ Net77 Live Action returned ${nLive ? nLive.length : 0} streams`);
+    if (nLive && nLive.length > 0) {
+      console.log(`   Sample: ${nLive[0].name} (${nLive[0].quality}) - ${nLive[0].url.substring(0, 80)}`);
+    }
+  } catch (e) {
+    console.error('❌ Live Action test error:', e.message);
+  }
+
   console.log('\n====================================================');
   console.log('🏁 All Tests Finished!');
   console.log('====================================================');
